@@ -281,6 +281,8 @@ select{border:1px solid var(--bd);border-radius:10px;padding:6px 8px;background:
 .segb.on{background:var(--ac);border-color:var(--ac);color:#fff}
 .sdone{display:block;font-size:13px;font-weight:600;color:var(--mu);padding:8px 4px 4px}
 .sdone:hover{color:var(--tx)}
+::placeholder{color:var(--mu);opacity:1}
+@media (max-width:860px){.addbar{flex-wrap:wrap}.addbar input[type=text]{flex:1 1 170px}.addbar .b{flex:0 0 auto}}
 @supports (height:100dvh){#app{height:100dvh}}
 @media (max-width:860px){
   #main{padding:12px 12px calc(90px + env(safe-area-inset-bottom))}
@@ -989,12 +991,15 @@ function renderTasks() {
   var page = el('div', 'page'); box.appendChild(page);
   if (query.trim()) { renderSearch(page); return; }
   var T = todayK(), v = nav.v, g = null;
-  if (v === 'project') { var pr = projById(nav.id); if (pr) { renderProject(page, pr); return; } v = 'myday'; nav = { v: 'myday', id: null }; }
+  if (v === 'project') { var pr = projById(nav.id); if (pr) { renderProject(page, pr); return; } v = 'projects'; nav = { v: 'projects', id: null }; }
+  if (v === 'projects') { renderProjects(page); return; }
   if (v === 'list') { g = goalById(nav.id); if (!g) { nav = { v: 'myday', id: null }; v = 'myday'; } }
   if (v === 'list' && isLocked(g)) { renderLockedList(page, g); return; }
   if (v === 'myday') {
     var ex = [], sg = sugState();
-    if (sg.hide === T) { var sb = el('button', 'b', '💡 Предложения'); sb.onclick = function () { sg.hide = ''; sugSave(sg); renderAll(); }; ex.push(sb); }
+    var wideNow = !window.matchMedia || window.matchMedia('(min-width:861px)').matches;
+    if (!wideNow) { var sb2 = el('button', 'b', '💡 Предложения'); sb2.onclick = function () { renderSuggest(openDlg('💡 Предложения'), true); }; ex.push(sb2); }
+    else if (sg.hide === T) { var sb = el('button', 'b', '💡 Предложения'); sb.onclick = function () { sg.hide = ''; sugSave(sg); renderAll(); }; ex.push(sb); }
     ex.push(selBtn());
     page.appendChild(headEl('☀️', 'Мой день', fmt(new Date(), { weekday: 'long', day: 'numeric', month: 'long' }), ex));
     page.appendChild(addBar('Добавить задачу на сегодня', 'add', function (t, d) { addTask(inbox(), t, { myDay: true, due: d }); }));
@@ -1003,7 +1008,7 @@ function renderTasks() {
     sec(page, 'Просрочено', od, 'red', true);
     rows(page, td, true);
     doneSec(page, 'myday', dn, true);
-    if (!od.length && !td.length && !dn.length) page.appendChild(emptyEl('☀️', 'Спланируйте свой день', 'Добавьте задачу выше или выберите что-то из предложений справа.'));
+    if (!od.length && !td.length && !dn.length) page.appendChild(emptyEl('☀️', 'Спланируйте свой день', (wideNow ? 'Добавьте задачу выше или выберите что-то из предложений справа.' : 'Добавьте задачу выше или откройте «💡 Предложения».')));
   } else if (v === 'important') {
     page.appendChild(headEl('⭐', 'Важно', 'Задачи, помеченные звёздочкой', [selBtn()]));
     page.appendChild(addBar('Добавить важную задачу', 'add', function (t, d) { addTask(inbox(), t, { important: true, due: d }); }));
@@ -1103,7 +1108,27 @@ function renderSearch(page) {
 }
 
 // ---- проекты ----
+function renderProjects(page) {
+  var nb = el('button', 'b', '＋ Новый проект'); nb.onclick = newProjectDialog;
+  var ps = allProjects();
+  page.appendChild(headEl('📁', 'Проекты', ps.length ? 'Папки со списками. Откройте проект, чтобы увидеть его списки.' : 'Проекты объединяют несколько списков', [nb]));
+  if (!ps.length) { page.appendChild(emptyEl('📁', 'Проектов пока нет', 'Создайте проект (папку) и переносите в него списки, например «Работа», «Дом», «Учёба».')); return; }
+  var grid = el('div', 'pgrid');
+  ps.forEach(function (p) {
+    var ls = siblings(p.id), all = 0, open = 0, locked = 0;
+    ls.forEach(function (g) { if (isLocked(g)) { locked++; return; } var l = leaves(g.tasks, []); all += l.length; open += l.filter(function (x) { return !x.done; }).length; });
+    var c = el('button', 'pcard');
+    c.appendChild(el('div', 'pc1', (p.icon || '📁') + ' ' + p.title));
+    c.appendChild(el('div', 'hint', (ls.length ? 'Списков: ' + ls.length : 'Пока нет списков') + (all ? ' · в работе: ' + open + ' из ' + all : '') + (locked ? ' · 🔒 ' + locked : '')));
+    if (all) { var bar = el('div', 'pb'), fill = el('div', 'pf'); fill.style.width = Math.round((all - open) / all * 100) + '%'; bar.appendChild(fill); c.appendChild(bar); }
+    c.onclick = function () { go('project', p.id); };
+    c.oncontextmenu = function (e) { e.preventDefault(); projectDialog(p); };
+    grid.appendChild(c);
+  });
+  page.appendChild(grid);
+}
 function renderProject(page, p) {
+  var bk = el('button', 'back', '←  📁 Проекты'); bk.title = 'Назад к списку проектов'; bk.onclick = function () { go('projects'); }; page.appendChild(bk);
   var ex = [], nl = el('button', 'b', '＋ Новый список'); nl.onclick = function () { newListDialog(p.id); }; ex.push(nl);
   var ad = el('button', 'b', '📥 Добавить списки'); ad.title = 'Перенести в проект существующие списки'; ad.onclick = function () { projectDialog(p); }; ex.push(ad);
   var st = el('button', 'ib', '⚙️'); st.title = 'Настройки проекта'; st.onclick = function () { projectDialog(p); }; ex.push(st);
@@ -1412,23 +1437,32 @@ function sideList(g, indent) {
   b.ondrop = function (e) { e.preventDefault(); b.classList.remove('dragover'); if (drag && drag.k === 'list') dropListOn(drag.id, g); drag = null; };
   return b;
 }
-function sideProject(p) {
-  var cnt = 0; siblings(p.id).forEach(function (g) { if (!isLocked(g)) cnt += g.tasks.filter(function (t) { return !t.done; }).length; });
-  var wrap = el('div', 'sproj' + (nav.v === 'project' && nav.id === p.id ? ' on' : '')), ar = el('button', 'sar', p.collapsed ? '▸' : '▾');
-  ar.onclick = function (e) { e.stopPropagation(); p.collapsed = !p.collapsed; persist([p]); renderSide(); };
-  var nm = el('button', 'sitem pn'); nm.appendChild(el('span', 'ic', p.icon || '📁')); nm.appendChild(el('span', 'sn', p.title)); if (cnt) nm.appendChild(el('span', 'cnt', String(cnt)));
-  nm.onclick = function () { go('project', p.id); };
-  nm.oncontextmenu = function (e) { e.preventDefault(); projectDialog(p); };
-  wrap.appendChild(ar); wrap.appendChild(nm);
-  wrap.draggable = true;
-  wrap.ondragstart = function (e) { drag = { k: 'project', id: p.id }; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', p.id); };
-  wrap.ondragend = function () { drag = null; clearDrag(); };
-  wrap.ondragover = function (e) { if (drag && (drag.k === 'list' || (drag.k === 'project' && drag.id !== p.id))) { e.preventDefault(); wrap.classList.add('dragover'); } };
-  wrap.ondragleave = function () { wrap.classList.remove('dragover'); };
-  wrap.ondrop = function (e) { e.preventDefault(); wrap.classList.remove('dragover'); if (drag) { if (drag.k === 'list') dropListToProject(drag.id, p); else dropProjectOn(drag.id, p); } drag = null; };
+function projRow() {
+  var open = lsGet('ui-proj-open', true), g0 = nav.v === 'list' ? goalById(nav.id) : null;
+  var on = nav.v === 'projects' || nav.v === 'project' || !!(g0 && g0.project);
+  var wrap = el('div', 'sproj' + (on ? ' on' : '')), ar = el('button', 'sar', open ? '▾' : '▸');
+  ar.title = open ? 'Свернуть проекты' : 'Показать проекты';
+  ar.onclick = function (e) { e.stopPropagation(); lsSet('ui-proj-open', !open); renderSide(); };
+  var nm = el('button', 'sitem pn'); nm.appendChild(el('span', 'ic', '📁')); nm.appendChild(el('span', 'sn', 'Проекты'));
+  if (projects.length) nm.appendChild(el('span', 'cnt', String(projects.length)));
+  nm.onclick = function () { go('projects'); };
+  wrap.appendChild(nm); wrap.appendChild(ar);
   return wrap;
 }
-var TITLES = { myday: 'Мой день', important: 'Важно', planned: 'Запланировано', all: 'Все задачи', diary: 'Календарь и дневник', settings: 'Настройки' };
+function sideProject(p) {
+  var cnt = 0; siblings(p.id).forEach(function (g) { if (!isLocked(g)) cnt += g.tasks.filter(function (t) { return !t.done; }).length; });
+  var b = sideItem(p.icon || '📁', p.title, cnt, nav.v === 'project' && nav.id === p.id, function () { go('project', p.id); });
+  b.classList.add('ind');
+  b.oncontextmenu = function (e) { e.preventDefault(); projectDialog(p); };
+  b.draggable = true;
+  b.ondragstart = function (e) { drag = { k: 'project', id: p.id }; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', p.id); };
+  b.ondragend = function () { drag = null; clearDrag(); };
+  b.ondragover = function (e) { if (drag && (drag.k === 'list' || (drag.k === 'project' && drag.id !== p.id))) { e.preventDefault(); b.classList.add('dragover'); } };
+  b.ondragleave = function () { b.classList.remove('dragover'); };
+  b.ondrop = function (e) { e.preventDefault(); b.classList.remove('dragover'); if (drag) { if (drag.k === 'list') dropListToProject(drag.id, p); else dropProjectOn(drag.id, p); } drag = null; };
+  return b;
+}
+var TITLES = { myday: 'Мой день', important: 'Важно', planned: 'Запланировано', all: 'Все задачи', projects: 'Проекты', diary: 'Календарь и дневник', settings: 'Настройки' };
 function renderSide() {
   var T = todayK();
   var counts = {
@@ -1441,6 +1475,8 @@ function renderSide() {
   [['myday', '☀️'], ['important', '⭐'], ['planned', '📅'], ['all', '🗂️']].forEach(function (x) {
     sn.appendChild(sideItem(x[1], TITLES[x[0]], counts[x[0]], nav.v === x[0], function () { go(x[0]); }));
   });
+  sn.appendChild(projRow());
+  if (lsGet('ui-proj-open', true)) allProjects().forEach(function (p) { sn.appendChild(sideProject(p)); });
   var sl = $('slists'); sl.innerHTML = '';
   var lab = el('div', 'slab', 'Списки');
   lab.ondragover = function (e) { if (drag && drag.k === 'list') { e.preventDefault(); lab.classList.add('dragover'); } };
@@ -1448,10 +1484,6 @@ function renderSide() {
   lab.ondrop = function (e) { e.preventDefault(); lab.classList.remove('dragover'); if (drag && drag.k === 'list') dropListToRoot(drag.id); drag = null; };
   sl.appendChild(lab);
   siblings('').forEach(function (g) { sl.appendChild(sideList(g, false)); });
-  if (projects.length) {
-    sl.appendChild(el('div', 'slab', 'Проекты'));
-    allProjects().forEach(function (p) { sl.appendChild(sideProject(p)); if (!p.collapsed) siblings(p.id).forEach(function (g) { sl.appendChild(sideList(g, true)); }); });
-  }
   var sw = $('snew'); sw.innerHTML = '';
   sw.appendChild(sideItem('＋', 'Новый список', 0, false, function () { newListDialog(''); }));
   sw.appendChild(sideItem('📁', 'Новый проект', 0, false, newProjectDialog));
@@ -1471,7 +1503,7 @@ function go(v, id) {
 }
 function renderMain() {
   var searching = query.trim() !== '', v = nav.v;
-  var taskView = searching || ['myday', 'important', 'planned', 'all', 'list', 'project'].indexOf(v) >= 0;
+  var taskView = searching || ['myday', 'important', 'planned', 'all', 'list', 'project', 'projects'].indexOf(v) >= 0;
   $('v-tasks').hidden = !taskView;
   $('v-diary').hidden = searching || v !== 'diary';
   $('settings').hidden = searching || v !== 'settings';
@@ -1480,11 +1512,13 @@ function renderMain() {
 }
 
 // ---- «Мой день»: предложения ----
-function renderSuggest(box) {
+function renderSuggest(box, inDlg) {
   var T = todayK(), st = sugState(), skip = st.skip || {}; box.hidden = false; box.innerHTML = '';
-  var top = el('div', 'dtop'); top.appendChild(el('b', '', '💡 Предложения'));
-  var x = el('button', 'ib', '✕'); x.title = 'Закрыть предложения'; x.onclick = function () { st.hide = T; sugSave(st); renderAll(); };
-  top.appendChild(x); box.appendChild(top);
+  if (!inDlg) {
+    var top = el('div', 'dtop'); top.appendChild(el('b', '', '💡 Предложения'));
+    var x = el('button', 'ib', '✕'); x.title = 'Закрыть предложения'; x.onclick = function () { st.hide = T; sugSave(st); renderAll(); };
+    top.appendChild(x); box.appendChild(top);
+  }
   box.appendChild(el('div', 'hint', 'Добавьте задачи из ваших списков в «Мой день».'));
   var T3 = dayK(3);
   var c = collect(function (n) { return !n.done && n.myDay !== T && n.due !== T && !overdue(n) && skip[n.id] !== T; });
@@ -1499,8 +1533,8 @@ function renderSuggest(box) {
     gr[1].forEach(function (y) {
       var r = el('div', 'sugrow'), b = el('div', 'tbody'); b.appendChild(el('div', 'ttl', y.n.text));
       b.appendChild(el('div', 'tmeta', y.g.title + (y.n.due ? ' · 📅 ' + shortDate(y.n.due) : '')));
-      var add = el('button', 'ib plusb', '＋'); add.title = 'Добавить в «Мой день»'; add.onclick = function () { y.n.myDay = T; saveGoal(y.g); };
-      var no = el('button', 'ib', '✕'); no.title = 'Скрыть предложение'; no.onclick = function () { skip[y.n.id] = T; st.skip = skip; sugSave(st); renderDetail(); };
+      var add = el('button', 'ib plusb', '＋'); add.title = 'Добавить в «Мой день»'; add.onclick = function () { y.n.myDay = T; saveGoal(y.g); if (inDlg) renderSuggest(box, true); };
+      var no = el('button', 'ib', '✕'); no.title = 'Скрыть предложение'; no.onclick = function () { skip[y.n.id] = T; st.skip = skip; sugSave(st); if (inDlg) renderSuggest(box, true); else renderDetail(); };
       r.appendChild(b); r.appendChild(add); r.appendChild(no); box.appendChild(r);
     });
   });
@@ -1700,6 +1734,7 @@ function goBack() {
   if (query.trim()) { $('qx').click(); return true; }
   var g = nav.v === 'list' ? goalById(nav.id) : null;
   if (g && g.project && projById(g.project)) { go('project', g.project); return true; }
+  if (nav.v === 'project') { go('projects'); return true; }
   if (nav.v !== 'myday') { go('myday'); return true; }
   return false;
 }
