@@ -1,5 +1,5 @@
 // Оффлайн-режим: приложение открывается без интернета. Сначала берём свежее из сети, если сети нет, то из памяти.
-const CACHE = 'diary-web-v4';
+const CACHE = 'diary-web-v6';
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', (e) => {

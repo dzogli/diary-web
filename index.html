@@ -283,6 +283,28 @@ select{border:1px solid var(--bd);border-radius:10px;padding:6px 8px;background:
 .sdone:hover{color:var(--tx)}
 ::placeholder{color:var(--mu);opacity:1}
 @media (max-width:860px){.addbar{flex-wrap:wrap}.addbar input[type=text]{flex:1 1 170px}.addbar .b{flex:0 0 auto}}
+.comp{background:var(--panel);border:1px solid var(--bd);border-radius:18px;padding:12px 14px 10px;box-shadow:var(--sh);margin-bottom:16px}
+.comp:focus-within{border-color:var(--ac)}
+.compin{display:block;width:100%;border:0;background:transparent;font-size:17px;padding:8px 2px;color:var(--tx)}
+.compin:focus{outline:0}
+.compbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}
+.cchip{display:inline-flex;align-items:center;border:1px solid var(--bd);border-radius:99px;padding:8px 13px;font-size:14px;background:var(--bg);max-width:58%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cchip.on{border-color:var(--ac);color:var(--ac);background:var(--ac2);font-weight:600}
+.sendb{margin-left:auto;width:44px;height:44px;border-radius:50%;background:var(--ac);color:#fff;font-size:18px;display:flex;align-items:center;justify-content:center;flex:none}
+.sendb:disabled{opacity:.35}
+.bigta{display:block;width:100%;min-height:140px;max-height:55vh;resize:vertical;border:1px solid var(--bd);border-radius:12px;padding:12px;font:inherit;font-size:16px;line-height:1.5;background:var(--bg);color:var(--tx)}
+.bigta:focus{outline:2px solid var(--ac)}
+.chead{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-weight:600}
+.linkb{color:var(--ac);font-size:14px;font-weight:600;padding:2px 6px}
+.fullin{display:block;width:100%;margin-bottom:8px;min-height:40px}
+.cgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.cgrid .chip{padding:9px 4px;text-align:center;font-size:13px}
+.acts{display:grid;gap:8px;margin-top:12px}
+.actb{text-align:left;padding:14px;border-radius:12px;border:1px solid var(--bd);background:var(--bg);font-size:16px}
+.actb:hover{background:var(--ac2)}
+.actb.danger{color:var(--red);border-color:var(--red)}
+.compin{resize:none;overflow:hidden;font-family:inherit;line-height:1.35}
+.dtitle{resize:none;overflow:hidden;font-family:inherit;line-height:1.3}
 @supports (height:100dvh){#app{height:100dvh}}
 @media (max-width:860px){
   #main{padding:12px 12px calc(90px + env(safe-area-inset-bottom))}
@@ -888,7 +910,25 @@ function listOptions(sel, withProjectNames) {
 }
 
 // ---- элементы интерфейса ----
+function autoGrow(ta) { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 220) + 'px'; }
+function textDialog(initial, onSave, title) {
+  var b = openDlg(title || 'Изменить текст'), ta = el('textarea', 'bigta'); ta.value = initial; b.appendChild(ta);
+  var bar = el('div', 'bar'), ok = el('button', 'b act', 'Сохранить'), cn = el('button', 'b', 'Отмена');
+  function save() { var v = ta.value.replace(/\s*\n\s*/g, ' ').trim(); if (!v) return; closeDlg(); if (v !== initial) onSave(v); }
+  ok.onclick = save; cn.onclick = closeDlg;
+  ta.onkeydown = function (e) { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') save(); };
+  bar.appendChild(ok); bar.appendChild(cn); b.appendChild(bar);
+  setTimeout(function () { ta.focus(); try { ta.setSelectionRange(ta.value.length, ta.value.length); } catch (e) {} }, 50);
+}
+function dueDialog(obj, g, title) {
+  var b = openDlg(title || 'Срок'), grid = el('div', 'cgrid');
+  [['Сегодня', 0], ['Завтра', 1], ['Через неделю', 7]].forEach(function (x) { var c = el('button', 'chip', x[0]); c.onclick = function () { obj.due = dayK(x[1]); closeDlg(); saveGoal(g); }; grid.appendChild(c); });
+  b.appendChild(grid); b.appendChild(el('div', 'dlab', 'Или выберите дату'));
+  var di = el('input', 'fullin'); di.type = 'date'; di.value = obj.due || ''; di.onchange = function () { if (di.value) { obj.due = di.value; closeDlg(); saveGoal(g); } }; b.appendChild(di);
+  if (obj.due) { var cl = el('button', 'b', 'Убрать срок'); cl.onclick = function () { obj.due = ''; closeDlg(); saveGoal(g); }; b.appendChild(cl); }
+}
 function editInline(sp, initial, onSave, onCancel) {
+  if (isNarrow() || initial.length > 50) { textDialog(initial, onSave); return; }
   var i = el('input', 'ei'); i.type = 'text'; i.value = initial; sp.replaceWith(i); i.focus(); i.select();
   var fin = false;
   function end(save) { if (fin) return; fin = true; var v = i.value.trim(); if (save && v && v !== initial) onSave(v); else (onCancel || renderAll)(); }
@@ -908,7 +948,48 @@ function dateCtl(obj, g, isDone, emptyLabel) {
   };
   return b;
 }
-function addBar(ph, fk, onAdd, noDate) {
+function isNarrow() { return window.innerWidth <= 860; }
+function dateLabel(d) { return !d ? '📅 Срок' : '📅 ' + (d === todayK() ? 'Сегодня' : d === dayK(1) ? 'Завтра' : shortDate(d)); }
+function composer(fk, defs) {
+  var st = { due: defs.due || '', gid: defs.goal || 'inbox', star: !!defs.important, day: !!defs.myDay };
+  var box = el('div', 'comp'), inp = el('textarea', 'compin'); inp.rows = 1; inp.enterKeyHint = 'send'; inp.placeholder = 'Название задачи'; inp.dataset.fk = fk;
+  var bar = el('div', 'compbar'), cd = el('button', 'cchip'), cl = el('button', 'cchip'), cs = el('button', 'cchip'), cy = el('button', 'cchip'), sb = el('button', 'sendb', '➤');
+  sb.title = 'Добавить задачу';
+  function paint() {
+    var g = goalById(st.gid) || inbox();
+    cd.textContent = dateLabel(st.due); cd.className = 'cchip' + (st.due ? ' on' : '');
+    cl.textContent = gIcon(g) + ' ' + g.title; cl.className = 'cchip';
+    cs.textContent = (st.star ? '★' : '☆') + ' Важно'; cs.className = 'cchip' + (st.star ? ' on' : '');
+    cy.textContent = '☀️ Мой день'; cy.className = 'cchip' + (st.day ? ' on' : '');
+    sb.disabled = !inp.value.trim();
+  }
+  function submit() {
+    var t = inp.value.replace(/\s*\n\s*/g, ' ').trim(); if (!t) return;
+    var g = goalById(st.gid) || inbox(); refocus = fk;
+    addTask(g, t, { due: st.due, myDay: st.day, important: st.star });
+  }
+  cd.onclick = function () {
+    var b = openDlg('Срок'), row = el('div', 'drow');
+    function set(v) { st.due = v; paint(); closeDlg(); inp.focus(); }
+    [['Сегодня', todayK()], ['Завтра', dayK(1)], ['Через неделю', dayK(7)], ['Без срока', '']].forEach(function (x) { var c = el('button', 'chip', x[0]); c.onclick = function () { set(x[1]); }; row.appendChild(c); });
+    b.appendChild(row);
+    b.appendChild(el('div', 'dlab', 'Или выберите дату'));
+    var di = el('input'); di.type = 'date'; di.value = st.due || ''; di.onchange = function () { if (di.value) set(di.value); }; b.appendChild(di);
+  };
+  cl.onclick = function () {
+    var b = openDlg('В какой список добавить'), ls = listOptions(st.gid); b.appendChild(ls);
+    var ok = el('button', 'b act', 'Выбрать'); ok.style.marginTop = '12px'; ok.onclick = function () { st.gid = ls.value; paint(); closeDlg(); inp.focus(); }; b.appendChild(ok);
+  };
+  cs.onclick = function () { st.star = !st.star; paint(); };
+  cy.onclick = function () { st.day = !st.day; paint(); };
+  inp.oninput = function () { autoGrow(inp); paint(); }; inp.onkeydown = function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } };
+  sb.onclick = submit;
+  bar.appendChild(cd); bar.appendChild(cl); if (!defs.important) bar.appendChild(cs); if (!defs.myDay) bar.appendChild(cy); bar.appendChild(sb);
+  box.appendChild(inp); box.appendChild(bar); paint();
+  return box;
+}
+function addBar(ph, fk, onAdd, noDate, defs) {
+  if (!noDate && defs && isNarrow()) return composer(fk, defs);
   var r = el('div', 'addbar'), i = el('input'); i.type = 'text'; i.placeholder = ph; i.dataset.fk = fk;
   var d = el('input'); d.type = 'date'; d.title = 'Срок (необязательно)';
   function go() { var t = i.value.trim(); if (!t) return; refocus = fk; onAdd(t, d.value || ''); }
@@ -917,9 +998,10 @@ function addBar(ph, fk, onAdd, noDate) {
   r.appendChild(el('span', 'plus', '＋')); r.appendChild(i); if (!noDate) r.appendChild(d); r.appendChild(b);
   return r;
 }
-function miniAdd(ph, fk, onAdd) {
+function miniAdd(ph, fk, onAdd, onCancel) {
   var r = el('div', 'mini'), i = el('input'); i.type = 'text'; i.placeholder = ph; i.dataset.fk = fk;
-  i.onkeydown = function (e) { if (e.key === 'Enter' && i.value.trim()) { refocus = fk; onAdd(i.value.trim()); } };
+  i.onkeydown = function (e) { if (e.key === 'Enter' && i.value.trim()) { refocus = fk; onAdd(i.value.trim()); } else if (e.key === 'Escape' && onCancel) onCancel(); };
+  if (onCancel) i.onblur = function () { setTimeout(function () { if (!i.value.trim() && document.activeElement !== i) onCancel(); }, 150); };
   r.appendChild(el('span', 'plus', '＋')); r.appendChild(i);
   return r;
 }
@@ -1002,7 +1084,7 @@ function renderTasks() {
     else if (sg.hide === T) { var sb = el('button', 'b', '💡 Предложения'); sb.onclick = function () { sg.hide = ''; sugSave(sg); renderAll(); }; ex.push(sb); }
     ex.push(selBtn());
     page.appendChild(headEl('☀️', 'Мой день', fmt(new Date(), { weekday: 'long', day: 'numeric', month: 'long' }), ex));
-    page.appendChild(addBar('Добавить задачу на сегодня', 'add', function (t, d) { addTask(inbox(), t, { myDay: true, due: d }); }));
+    page.appendChild(addBar('Добавить задачу на сегодня', 'add', function (t, d) { addTask(inbox(), t, { myDay: true, due: d }); }, false, { goal: 'inbox', myDay: true }));
     var od = collect(overdue), td = collect(function (n) { return !n.done && !overdue(n) && (n.myDay === T || n.due === T); });
     var dn = collect(function (n) { return n.done && (n.myDay === T || n.due === T); });
     sec(page, 'Просрочено', od, 'red', true);
@@ -1011,13 +1093,13 @@ function renderTasks() {
     if (!od.length && !td.length && !dn.length) page.appendChild(emptyEl('☀️', 'Спланируйте свой день', (wideNow ? 'Добавьте задачу выше или выберите что-то из предложений справа.' : 'Добавьте задачу выше или откройте «💡 Предложения».')));
   } else if (v === 'important') {
     page.appendChild(headEl('⭐', 'Важно', 'Задачи, помеченные звёздочкой', [selBtn()]));
-    page.appendChild(addBar('Добавить важную задачу', 'add', function (t, d) { addTask(inbox(), t, { important: true, due: d }); }));
+    page.appendChild(addBar('Добавить важную задачу', 'add', function (t, d) { addTask(inbox(), t, { important: true, due: d }); }, false, { goal: 'inbox', important: true }));
     var im = collect(function (n) { return !n.done && n.important; }), imd = collect(function (n) { return n.done && n.important; });
     rows(page, im, true); doneSec(page, 'imp', imd, true);
     if (!im.length && !imd.length) page.appendChild(emptyEl('⭐', 'Нет важных задач', 'Нажмите ☆ у задачи, чтобы отметить её важной.'));
   } else if (v === 'planned') {
     page.appendChild(headEl('📅', 'Запланировано', 'Задачи со сроком', [selBtn()]));
-    page.appendChild(addBar('Добавить задачу со сроком', 'add', function (t, d) { addTask(inbox(), t, { due: d || T }); }));
+    page.appendChild(addBar('Добавить задачу со сроком', 'add', function (t, d) { addTask(inbox(), t, { due: d || T }); }, false, { goal: 'inbox', due: T }));
     var pl = collect(function (n) { return !n.done && n.due; }).sort(byDue), W = dayK(7), T1 = dayK(1);
     sec(page, 'Просрочено', pl.filter(function (x) { return x.n.due < T; }), 'red', true);
     sec(page, 'Сегодня', pl.filter(function (x) { return x.n.due === T; }), '', true);
@@ -1028,7 +1110,7 @@ function renderTasks() {
     if (!pl.length) page.appendChild(emptyEl('📅', 'Нет запланированных задач', 'Поставьте задачам срок, и они появятся здесь.'));
   } else if (v === 'all') {
     page.appendChild(headEl('🗂️', 'Все задачи', 'По спискам', [selBtn()]));
-    page.appendChild(addBar('Добавить задачу', 'add', function (t, d) { addTask(inbox(), t, { due: d }); }));
+    page.appendChild(addBar('Добавить задачу', 'add', function (t, d) { addTask(inbox(), t, { due: d }); }, false, { goal: 'inbox' }));
     var any = false;
     visibleGoals().forEach(function (x) {
       var o = x.tasks.filter(function (t) { return !t.done; });
@@ -1043,14 +1125,14 @@ function renderTasks() {
     var p = progress(g), ls = leaves(g.tasks, []), dc = ls.filter(function (x) { return x.done; }).length, ex2 = [];
     if (g.id !== 'inbox') ex2.push(dateCtl(g, g, p >= 1, '📅 Срок цели'));
     var pu = el('button', 'b', '📥 Из существующих'); pu.title = 'Добавить в список задачи из других списков'; pu.onclick = function () { pullDialog(g); }; ex2.push(pu);
-    var gs = el('button', 'ib', '⚙️'); gs.title = 'Настройки списка'; gs.onclick = function () { listDialog(g); }; ex2.push(gs); ex2.push(selBtn());
+    var gs = el('button', isNarrow() ? 'b' : 'ib', isNarrow() ? '⚙️ Настройки' : '⚙️'); gs.title = 'Настройки списка'; gs.onclick = function () { listDialog(g); }; ex2.push(gs); ex2.push(selBtn());
     var h = headEl(gIcon(g), g.title, ls.length ? 'Выполнено ' + dc + ' из ' + ls.length + ' · ' + Math.round(p * 100) + '%' : 'Пока нет задач', ex2);
     var ttl = h.querySelector('.ptitle');
     if (g.id !== 'inbox') ttl.onclick = function () { editInline(ttl, g.title, function (x) { g.title = x; saveGoal(g); }); };
     backBar(page, g);
     page.appendChild(h);
     if (g.tasks.length) { var bar = el('div', 'pb'), fill = el('div', 'pf'); fill.style.width = Math.round(p * 100) + '%'; bar.appendChild(fill); page.appendChild(bar); }
-    page.appendChild(addBar('Добавить задачу', 'add', function (t, d) { addTask(g, t, { due: d }); }));
+    page.appendChild(addBar('Добавить задачу', 'add', function (t, d) { addTask(g, t, { due: d }); }, false, { goal: g.id }));
     var mk = function (t) { return { g: g, n: t, depth: 0, parent: null }; };
     rows(page, g.tasks.filter(function (t) { return !t.done; }).map(mk), false);
     doneSec(page, 'l' + g.id, g.tasks.filter(function (t) { return t.done; }).map(mk), false);
@@ -1130,13 +1212,15 @@ function renderProjects(page) {
 function renderProject(page, p) {
   var bk = el('button', 'back', '←  📁 Проекты'); bk.title = 'Назад к списку проектов'; bk.onclick = function () { go('projects'); }; page.appendChild(bk);
   var ex = [], nl = el('button', 'b', '＋ Новый список'); nl.onclick = function () { newListDialog(p.id); }; ex.push(nl);
+  var pt = el('button', 'b', '📥 Добавить задачи'); pt.title = 'Перенести в проект существующие задачи'; pt.onclick = function () { pullDialog(null, p); }; ex.push(pt);
   var ad = el('button', 'b', '📥 Добавить списки'); ad.title = 'Перенести в проект существующие списки'; ad.onclick = function () { projectDialog(p); }; ex.push(ad);
-  var st = el('button', 'ib', '⚙️'); st.title = 'Настройки проекта'; st.onclick = function () { projectDialog(p); }; ex.push(st);
+  var st = el('button', isNarrow() ? 'b' : 'ib', isNarrow() ? '⚙️ Настройки' : '⚙️'); st.title = 'Настройки проекта'; st.onclick = function () { projectDialog(p); }; ex.push(st);
   var ls = siblings(p.id);
   var h = headEl(p.icon || '📁', p.title, ls.length ? 'Списков: ' + ls.length : 'Пока нет списков', ex);
   var ttl = h.querySelector('.ptitle'); ttl.onclick = function () { editInline(ttl, p.title, function (x) { p.title = x; renderAll(); persist([p]); }); };
   page.appendChild(h);
-  if (!ls.length) { page.appendChild(emptyEl('📁', 'В проекте пока нет списков', 'Создайте новый список или нажмите «Добавить списки», чтобы перенести в проект существующие.')); return; }
+  page.appendChild(addBar('Добавить задачу в проект', 'padd', function (t) { addTask(ensureProjectList(p), t, {}); }, true));
+  if (!ls.length) { page.appendChild(emptyEl('📁', 'В проекте пока нет списков', 'Добавьте задачу выше (создастся список «Задачи»), создайте список или перенесите в проект существующие задачи и списки.')); return; }
   var grid = el('div', 'pgrid');
   ls.forEach(function (g) {
     var c = el('button', 'pcard'), lk = isLocked(g);
@@ -1299,15 +1383,24 @@ function projectDialog(p, isNew) {
   }
   render(); setTimeout(function () { var i = b.querySelector('input'); if (i) i.focus(); }, 30);
 }
-function pullDialog(g) {
-  var b = openDlg('Добавить существующие задачи'), st = { src: '', q: '', pick: {} };
+function pullDialog(g, proj) {
+  var b = openDlg(proj ? 'Добавить задачи в проект' : 'Добавить существующие задачи'), st = { src: '', q: '', pick: {}, tgt: '' };
   function count() { return Object.keys(st.pick).length; }
   function render() {
     b.innerHTML = '';
-    b.appendChild(el('div', 'hint', 'Отметьте задачи из других списков. Они будут перенесены в «' + g.title + '».'));
+    var tsel = null;
+    if (proj) {
+      b.appendChild(el('div', 'dlab', 'В какой список проекта «' + proj.title + '» добавить'));
+      tsel = el('select'); var tl = siblings(proj.id).filter(function (x) { return !isLocked(x); });
+      tl.forEach(function (x) { var o = el('option', '', gIcon(x) + ' ' + x.title); o.value = x.id; if (st.tgt === x.id) o.selected = true; tsel.appendChild(o); });
+      if (!tl.length) { var on = el('option', '', '＋ Новый список «Задачи»'); on.value = '__new__'; tsel.appendChild(on); }
+      tsel.onchange = function () { st.tgt = tsel.value; };
+      b.appendChild(tsel);
+    }
+    b.appendChild(el('div', 'hint', proj ? 'Отметьте задачи из других списков. Они будут перенесены в выбранный список проекта.' : 'Отметьте задачи из других списков. Они будут перенесены в «' + g.title + '».'));
     var row = el('div', 'drow'); row.style.margin = '10px 0';
     var ss = el('select'), oa = el('option', '', 'Все списки'); oa.value = ''; ss.appendChild(oa);
-    visibleGoals().filter(function (x) { return x !== g; }).forEach(function (x) { var o = el('option', '', gIcon(x) + ' ' + x.title); o.value = x.id; if (st.src === x.id) o.selected = true; ss.appendChild(o); });
+    visibleGoals().filter(function (x) { return !g || x !== g; }).forEach(function (x) { var o = el('option', '', gIcon(x) + ' ' + x.title); o.value = x.id; if (st.src === x.id) o.selected = true; ss.appendChild(o); });
     ss.onchange = function () { st.src = ss.value; render(); };
     var qi = el('input'); qi.type = 'text'; qi.placeholder = 'Поиск по задачам'; qi.value = st.q; qi.oninput = function () { st.q = qi.value; fillList(); };
     row.appendChild(ss); row.appendChild(qi); b.appendChild(row);
@@ -1317,7 +1410,7 @@ function pullDialog(g) {
     function upd() { ok.textContent = 'Добавить (' + count() + ')'; ok.disabled = !count(); }
     function fillList() {
       box.innerHTML = ''; shown = []; var ql = st.q.trim().toLowerCase(), any = false;
-      visibleGoals().filter(function (x) { return x !== g && (!st.src || x.id === st.src); }).forEach(function (x) {
+      visibleGoals().filter(function (x) { return (!g || x !== g) && (!st.src || x.id === st.src); }).forEach(function (x) {
         var items = x.tasks.filter(function (t) { return !t.done && (!ql || t.text.toLowerCase().indexOf(ql) >= 0); });
         if (!items.length) return; any = true;
         box.appendChild(el('div', 'pickh', gIcon(x) + ' ' + x.title));
@@ -1335,11 +1428,14 @@ function pullDialog(g) {
     cn.onclick = closeDlg;
     ok.onclick = function () {
       if (!count()) return;
-      var ch = [g];
+      var tg = g;
+      if (proj) tg = (tsel && tsel.value !== '__new__') ? goalById(tsel.value) : ensureProjectList(proj);
+      if (!tg) return;
+      var ch = [tg];
       goals.forEach(function (x) {
-        if (x === g) return;
+        if (x === tg) return;
         var moved = x.tasks.filter(function (t) { return st.pick[t.id]; });
-        if (moved.length) { x.tasks = x.tasks.filter(function (t) { return !st.pick[t.id]; }); g.tasks = g.tasks.concat(moved); ch.push(x); }
+        if (moved.length) { x.tasks = x.tasks.filter(function (t) { return !st.pick[t.id]; }); tg.tasks = tg.tasks.concat(moved); ch.push(x); }
       });
       closeDlg(); saveGoals(ch);
     };
@@ -1437,31 +1533,6 @@ function sideList(g, indent) {
   b.ondrop = function (e) { e.preventDefault(); b.classList.remove('dragover'); if (drag && drag.k === 'list') dropListOn(drag.id, g); drag = null; };
   return b;
 }
-function projRow() {
-  var open = lsGet('ui-proj-open', true), g0 = nav.v === 'list' ? goalById(nav.id) : null;
-  var on = nav.v === 'projects' || nav.v === 'project' || !!(g0 && g0.project);
-  var wrap = el('div', 'sproj' + (on ? ' on' : '')), ar = el('button', 'sar', open ? '▾' : '▸');
-  ar.title = open ? 'Свернуть проекты' : 'Показать проекты';
-  ar.onclick = function (e) { e.stopPropagation(); lsSet('ui-proj-open', !open); renderSide(); };
-  var nm = el('button', 'sitem pn'); nm.appendChild(el('span', 'ic', '📁')); nm.appendChild(el('span', 'sn', 'Проекты'));
-  if (projects.length) nm.appendChild(el('span', 'cnt', String(projects.length)));
-  nm.onclick = function () { go('projects'); };
-  wrap.appendChild(nm); wrap.appendChild(ar);
-  return wrap;
-}
-function sideProject(p) {
-  var cnt = 0; siblings(p.id).forEach(function (g) { if (!isLocked(g)) cnt += g.tasks.filter(function (t) { return !t.done; }).length; });
-  var b = sideItem(p.icon || '📁', p.title, cnt, nav.v === 'project' && nav.id === p.id, function () { go('project', p.id); });
-  b.classList.add('ind');
-  b.oncontextmenu = function (e) { e.preventDefault(); projectDialog(p); };
-  b.draggable = true;
-  b.ondragstart = function (e) { drag = { k: 'project', id: p.id }; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', p.id); };
-  b.ondragend = function () { drag = null; clearDrag(); };
-  b.ondragover = function (e) { if (drag && (drag.k === 'list' || (drag.k === 'project' && drag.id !== p.id))) { e.preventDefault(); b.classList.add('dragover'); } };
-  b.ondragleave = function () { b.classList.remove('dragover'); };
-  b.ondrop = function (e) { e.preventDefault(); b.classList.remove('dragover'); if (drag) { if (drag.k === 'list') dropListToProject(drag.id, p); else dropProjectOn(drag.id, p); } drag = null; };
-  return b;
-}
 var TITLES = { myday: 'Мой день', important: 'Важно', planned: 'Запланировано', all: 'Все задачи', projects: 'Проекты', diary: 'Календарь и дневник', settings: 'Настройки' };
 function renderSide() {
   var T = todayK();
@@ -1475,8 +1546,8 @@ function renderSide() {
   [['myday', '☀️'], ['important', '⭐'], ['planned', '📅'], ['all', '🗂️']].forEach(function (x) {
     sn.appendChild(sideItem(x[1], TITLES[x[0]], counts[x[0]], nav.v === x[0], function () { go(x[0]); }));
   });
-  sn.appendChild(projRow());
-  if (lsGet('ui-proj-open', true)) allProjects().forEach(function (p) { sn.appendChild(sideProject(p)); });
+  var g0 = nav.v === 'list' ? goalById(nav.id) : null;
+  sn.appendChild(sideItem('📁', 'Проекты', projects.length, nav.v === 'projects' || nav.v === 'project' || !!(g0 && g0.project), function () { go('projects'); }));
   var sl = $('slists'); sl.innerHTML = '';
   var lab = el('div', 'slab', 'Списки');
   lab.ondragover = function (e) { if (drag && drag.k === 'list') { e.preventDefault(); lab.classList.add('dragover'); } };
@@ -1561,9 +1632,9 @@ function renderDetail() {
 
   var c1 = el('div', 'dcard'), dh = el('div', 'dh');
   var ck = el('button', 'ck' + (n.done ? ' on' : '')); ck.onclick = function () { toggleDone(n, g); };
-  var ti = el('input', 'dtitle'); ti.type = 'text'; ti.value = n.text;
+  var ti = el('textarea', 'dtitle'); ti.rows = 1; ti.value = n.text; ti.oninput = function () { autoGrow(ti); }; setTimeout(function () { autoGrow(ti); }, 0);
   ti.onchange = function () { var v = ti.value.trim(); if (v) { n.text = v; saveGoal(g); } else renderDetail(); };
-  ti.onkeydown = function (e) { if (e.key === 'Enter') ti.blur(); };
+  ti.onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); ti.blur(); } };
   var st = el('button', 'star' + (n.important ? ' on' : ''), n.important ? '★' : '☆'); st.title = 'Важно';
   st.onclick = function () { n.important = !n.important; saveGoal(g); };
   dh.appendChild(ck); dh.appendChild(ti); dh.appendChild(st); c1.appendChild(dh);
@@ -1578,10 +1649,23 @@ function renderDetail() {
       plus.onclick = function () { openAdd = openAdd === c.id ? null : c.id; refocus = openAdd ? 'sub' + c.id : null; renderDetail(); applyFocus(); };
       var del = el('button', 'ib', '🗑'); del.title = 'Удалить шаг';
       del.onclick = function () { var ff = findNode(g.tasks, c.id); ff.list.splice(ff.list.indexOf(c), 1); saveGoal(g); };
-      [k, tx, dateCtl(c, g, c.done), plus, del].forEach(function (x) { r.appendChild(x); });
+      if (isNarrow()) {
+        var more = el('button', 'ib', '⋯'); more.title = 'Действия с шагом';
+        more.onclick = function () {
+          var d = openDlg('Шаг'), bx = el('div', 'acts');
+          d.appendChild(el('div', 'hint', c.text));
+          function act(label, fn, cls) { var a = el('button', 'actb' + (cls ? ' ' + cls : ''), label); a.onclick = function () { closeDlg(); fn(); }; bx.appendChild(a); }
+          act('✏️ Изменить текст', function () { textDialog(c.text, function (v) { c.text = v; saveGoal(g); }); });
+          act('📅 Срок' + (c.due ? ': ' + shortDate(c.due) : ''), function () { dueDialog(c, g); });
+          act('＋ Вложенный шаг', function () { openAdd = c.id; refocus = 'sub' + c.id; renderDetail(); applyFocus(); });
+          act('🗑 Удалить шаг', function () { var ff = findNode(g.tasks, c.id); ff.list.splice(ff.list.indexOf(c), 1); saveGoal(g); }, 'danger');
+          d.appendChild(bx);
+        };
+        [k, tx].concat(c.due ? [dateCtl(c, g, c.done)] : [], [more]).forEach(function (x) { r.appendChild(x); });
+      } else [k, tx, dateCtl(c, g, c.done), plus, del].forEach(function (x) { r.appendChild(x); });
       sc.appendChild(r);
       if (openAdd === c.id) {
-        var mr = miniAdd('Вложенный шаг…', 'sub' + c.id, function (t) { c.children.push(newNode(t, '')); saveGoal(g); });
+        var mr = miniAdd('Вложенный шаг…', 'sub' + c.id, function (t) { c.children.push(newNode(t, '')); saveGoal(g); }, function () { if (openAdd === c.id) { openAdd = null; renderDetail(); } });
         mr.style.marginLeft = (depth + 1) * 22 + 'px'; sc.appendChild(mr);
       }
       stepRows(c.children, depth + 1, c.id);
@@ -1603,28 +1687,25 @@ function renderDetail() {
   md.onclick = function () { n.myDay = n.myDay === T ? '' : T; saveGoal(g); };
 
   // срок
-  var c3 = el('div', 'dcard'), dr = el('div', 'drow');
-  dr.appendChild(el('span', '', '📅 Срок'));
-  var di = el('input'); di.type = 'date'; di.value = n.due || ''; di.onchange = function () { n.due = di.value; saveGoal(g); };
-  dr.appendChild(di);
-  [['Сегодня', 0], ['Завтра', 1], ['Через неделю', 7]].forEach(function (x) {
-    var b = el('button', 'chip', x[0]); b.onclick = function () { n.due = dayK(x[1]); saveGoal(g); }; dr.appendChild(b);
-  });
-  if (n.due) { var cl = el('button', 'chip', 'Убрать'); cl.onclick = function () { n.due = ''; saveGoal(g); }; dr.appendChild(cl); }
-  c3.appendChild(dr);
+  var c3 = el('div', 'dcard'), h3 = el('div', 'chead'); h3.appendChild(el('span', '', '📅 Срок'));
+  if (n.due) { var cl = el('button', 'linkb', 'Убрать'); cl.onclick = function () { n.due = ''; saveGoal(g); }; h3.appendChild(cl); }
+  c3.appendChild(h3);
+  var di = el('input', 'fullin'); di.type = 'date'; di.value = n.due || ''; di.onchange = function () { n.due = di.value; saveGoal(g); }; c3.appendChild(di);
+  var g3 = el('div', 'cgrid');
+  [['Сегодня', 0], ['Завтра', 1], ['Через неделю', 7]].forEach(function (x) { var b = el('button', 'chip', x[0]); b.onclick = function () { n.due = dayK(x[1]); saveGoal(g); }; g3.appendChild(b); });
+  c3.appendChild(g3);
 
   // напоминание
-  var cr = el('div', 'dcard'), rr = el('div', 'drow');
-  rr.appendChild(el('span', '', '🔔 Напомнить'));
-  var ri = el('input'); ri.type = 'datetime-local'; ri.value = n.remind || '';
-  ri.onchange = function () { n.remind = ri.value; n.reminded = false; saveGoal(g); };
-  rr.appendChild(ri);
-  function remAt(lbl, fn) { var b = el('button', 'chip', lbl); b.onclick = function () { var d = fn(); n.remind = key(d) + 'T' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()); n.reminded = false; saveGoal(g); }; rr.appendChild(b); }
+  var cr = el('div', 'dcard'), hr = el('div', 'chead'); hr.appendChild(el('span', '', '🔔 Напомнить'));
+  if (n.remind) { var rc = el('button', 'linkb', 'Убрать'); rc.onclick = function () { n.remind = ''; n.reminded = false; saveGoal(g); }; hr.appendChild(rc); }
+  cr.appendChild(hr);
+  var ri = el('input', 'fullin'); ri.type = 'datetime-local'; ri.value = n.remind || ''; ri.onchange = function () { n.remind = ri.value; n.reminded = false; saveGoal(g); }; cr.appendChild(ri);
+  var gr = el('div', 'cgrid');
+  function remAt(lbl, fn) { var b = el('button', 'chip', lbl); b.onclick = function () { var d = fn(); n.remind = key(d) + 'T' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()); n.reminded = false; saveGoal(g); }; gr.appendChild(b); }
   remAt('Через час', function () { return new Date(Date.now() + 3600000); });
   remAt('Сегодня 18:00', function () { var d = new Date(); d.setHours(18, 0, 0, 0); return d; });
   remAt('Завтра 9:00', function () { var d = new Date(); d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); return d; });
-  if (n.remind) { var rc = el('button', 'chip', 'Убрать'); rc.onclick = function () { n.remind = ''; n.reminded = false; saveGoal(g); }; rr.appendChild(rc); }
-  cr.appendChild(rr);
+  cr.appendChild(gr);
   if (n.remind && n.reminded) cr.appendChild(el('div', 'hint', 'Напоминание уже показано.'));
 
   // повтор
@@ -1720,6 +1801,9 @@ function renderDetail() {
 }
 
 function renderAll() { renderSide(); renderMain(); renderDetail(); renderBulk(); applyFocus(); }
+
+var wasNarrow = isNarrow();
+window.addEventListener('resize', function () { var n = isNarrow(); if (n !== wasNarrow) { wasNarrow = n; renderAll(); } });
 
 // шаг «назад»: закрыть панель или диалог, вернуться в проект или на главный экран; false, если уже на главном
 function goBack() {
