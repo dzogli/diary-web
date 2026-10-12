@@ -1,0 +1,13 @@
+{
+  "appId": "com.example.diary",
+  "appName": "Мой дневник",
+  "webDir": "www",
+  "backgroundColor": "#f4faf5",
+  "plugins": {
+    "StatusBar": {
+      "overlaysWebView": false,
+      "style": "LIGHT",
+      "backgroundColor": "#E2F4E8"
+    }
+  }
+}
