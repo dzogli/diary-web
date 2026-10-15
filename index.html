@@ -927,7 +927,7 @@ function locate(nodes, id, parent) {
   }
   return null;
 }
-function deleteNodes(items) {
+function doDeleteNodes(items) {
   var ids = [], gs = [], names = [];
   items.forEach(function (x) {
     var loc = locate(x.g.tasks, x.n.id, null); if (!loc) return;
@@ -938,6 +938,26 @@ function deleteNodes(items) {
   if (!ids.length) return;
   cur = null; saveGoals(gs);
   toastAct(ids.length === 1 ? 'Удалено: ' + names[0].slice(0, 40) : 'Удалено задач: ' + ids.length, 'Отменить', function () { ids.slice().reverse().forEach(restoreTrash); });
+}
+// строка гаснет, чуть уходит вниз, а соседние задачи плавно сдвигаются на её место; только потом данные удаляются
+function animateOut(els, done) {
+  els.forEach(function (e) {
+    e.style.height = e.offsetHeight + 'px'; e.style.overflow = 'hidden'; e.style.pointerEvents = 'none';
+    e.style.transition = 'height .26s ease, opacity .2s ease, transform .26s ease, margin .26s ease, padding .26s ease, border-width .26s ease';
+    void e.offsetHeight;
+    e.style.opacity = '0'; e.style.transform = 'translateY(12px)'; e.style.height = '0px'; e.style.marginBottom = '0px'; e.style.paddingTop = '0px'; e.style.paddingBottom = '0px'; e.style.borderWidth = '0px';
+  });
+  setTimeout(done, 290);
+}
+function deleteNodes(items) {
+  var els = [];
+  items.forEach(function (x) {
+    [].forEach.call(document.querySelectorAll('.trow[data-tid="' + x.n.id + '"]'), function (r) {
+      var o = r.closest('.swrap') || r; if (o.offsetParent !== null && els.indexOf(o) < 0) els.push(o);
+    });
+  });
+  if (els.length) { if (cur) { cur = null; renderDetail(); } animateOut(els, function () { doDeleteNodes(items); }); return; }
+  doDeleteNodes(items);
 }
 function restoreTrash(id) {
   var it = trash.filter(function (x) { return x.id === id; })[0]; if (!it) return;
@@ -1411,6 +1431,7 @@ function taskRow(it, showList) {
   shownIds.push(it.n.id);
   var g = it.g, n = it.n, T = todayK();
   var row = el('div', 'trow' + (n.done ? ' done' : '') + (cur && cur.id === n.id ? ' on' : '') + (n.color ? ' colored' : '') + (selMode && selected[n.id] ? ' picked' : ''));
+  row.dataset.tid = n.id;
   if (n.color) row.style.setProperty('--tc', COLORS[n.color] || '#8b8d98');
   var lead;
   if (selMode) { lead = el('span', 'scb' + (selected[n.id] ? ' on' : ''), selected[n.id] ? '✓' : ''); }
@@ -2570,7 +2591,16 @@ function renderDetail() {
   [c1, sc, md, c3, cpr, ctg, cr, cp, chb, cfo, cl2, cc, cf, c4, del2].forEach(function (x) { if (x) box.appendChild(x); });
 }
 
-function renderAll() { renderSide(); renderMain(); renderDetail(); renderBulk(); applyFocus(); }
+var lastRenderKey = '', lastDetailId = '';
+function navKey() { return nav.v + '|' + (nav.id || '') + '|' + (query.trim() ? 'q' : '') + '|' + projTab; }
+function renderAll() {
+  var m = $('main'), dt = $('detail'), k = navKey(), same = k === lastRenderKey, top = (same && m) ? m.scrollTop : 0;
+  var dsame = !!(cur && cur.id === lastDetailId), dtop = (dsame && dt) ? dt.scrollTop : 0;
+  renderSide(); renderMain(); renderDetail(); renderBulk(); applyFocus();
+  lastRenderKey = k; lastDetailId = cur ? cur.id : '';
+  if (top && m) { m.scrollTop = top; requestAnimationFrame(function () { if (navKey() === k) m.scrollTop = top; }); }
+  if (dtop && dt) { dt.scrollTop = dtop; requestAnimationFrame(function () { if (cur && cur.id === lastDetailId) dt.scrollTop = dtop; }); }
+}
 
 var wasNarrow = isNarrow();
 window.addEventListener('resize', function () { var n = isNarrow(); if (n !== wasNarrow) { wasNarrow = n; renderAll(); } });
@@ -3531,8 +3561,12 @@ async function restoreSnapshot(snap) {
 }
 
 // ---- «Что нового», карточки настроек ----
-var APP_VERSION = '5.0.2';
+var APP_VERSION = '5.0.3';
 var CHANGELOG = [
+  { v: '5.0.3', t: 'Плавное удаление задач и экран без прыжков', items: [
+    '🗑 Удаляемая задача теперь плавно гаснет и уходит вниз, а соседние задачи спокойно сдвигаются на её место (как в Todoist). Так же при удалении свайпом, из панели задачи и при массовом удалении.',
+    '📜 Экран больше не перескакивает: после удаления, выполнения и других правок список остаётся на том же месте, а панель задачи не прокручивается вверх.'
+  ] },
   { v: '5.0.2', t: 'Неделя, выбор даты на iPhone, статистика, уведомления и компактная форма задачи', items: [
     '🗓 Неделя на телефоне прокручивается вбок без случайного возврата назад; карточки дней стали шире, а при открытии неделя сама прокручивается к сегодняшнему дню. Свайп «назад» больше не срабатывает на любых горизонтально прокручиваемых блоках.',
     '📅 На iPhone дата, время и напоминание в задаче выбираются в окне и применяются только после кнопки «✓ Готово», чтобы не ставить дату случайным нажатием (на Android выбор остался прежним).',
